@@ -76,48 +76,59 @@ class PredictView(views.APIView):
 
         algorithm_status = self.request.query_params.get("status", "test")
         algorithm_version = self.request.query_params.get("version","0.0.1")
-        print(algorithm_status,algorithm_version,endpoint_name)
 
         algs = MLAlgorithm.objects.filter(parent_endpoint__name = endpoint_name, status__status = algorithm_status, status__active=True)
-        print(algs)
+
         if algorithm_version is not None:
             algs = algs.filter(version = algorithm_version)
-
 
         if len(algs) == 0:
             return Response(
                 {"status": "Error", "message": "ML algorithm is not available"},
                 status=status.HTTP_400_BAD_REQUEST,
             )
-        if len(algs) != 1 and algorithm_status != "test":
+        if len(algs) != 2 and algorithm_status != "test":
             return Response(
                 {"status": "Error", "message": "ML algorithm selection is ambiguous. Please specify algorithm version."},
                 status=status.HTTP_400_BAD_REQUEST,
             )
+
         alg_index = 0
-        if algorithm_status == "ab_testing":
-            alg_index = 0 if rand() < 0.5 else 1
+        if algorithm_status == "test":
+            alg_index = 0 if rand() < 0.5 else 2
+            #alg_index = 2
 
-        input_data = json.dumps(request.data['filename'])
-        #print(input_data,type(input_data))
+        indx = 0
+        for i in registry.endpoints:
+            indx = i
 
-        algorithm_object = registry.endpoints[algs[alg_index].id]
+        print(alg_index,algs[alg_index].id)
+        #algorithm_object = registry.endpoints[algs[alg_index].id]
+        algorithm_object = registry.endpoints[indx]
+        print(request.data['filename'])
         prediction = algorithm_object.compute_prediction(request.data['filename'])
 
+        label = ""
+        labelList = []
+        for p in prediction:
+            print(p)
 
-        label = prediction["label"] if "label" in prediction else "error"
+            labelList.append( p["label"] if "label" in p else "error")
+
+
 
 
         ml_request = MLRequest(
             input_data=json.dumps(request.data['filename']),
             full_response=prediction,
-            response=label,
+            response=label.join("labelList"),
             feedback="",
             parent_mlalgorithm=algs[alg_index],
         )
-        print(input_data)
+
         ml_request.save()
 
-        prediction["request_id"] = ml_request.id
+        for p in prediction:
+            p["request_id"] = ml_request.id
 
         return Response(prediction)

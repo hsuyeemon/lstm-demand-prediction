@@ -3,6 +3,8 @@ from keras.models import load_model
 from sklearn.preprocessing import LabelEncoder
 from sklearn.preprocessing import MinMaxScaler
 import pandas as pd
+import json
+from numpy import concatenate
 
 class lstm_model:
     def __init__(self):
@@ -12,23 +14,74 @@ class lstm_model:
         #self.model = joblib.load(path_to_artifacts + "random_forest.joblib")
 
         self.model = load_model(path_to_artifacts+'model.h5')
+        self.num_lags = 30
+        self.num_features = 1
+        self.scaler = MinMaxScaler(feature_range=(0, 1))
 
-    def preprocessing(self, input_data):
-    #def preprocessing(self):
-        # JSON to pandas DataFrame
-        #input_data = pd.DataFrame(input_data, index=[0])
+    # convert series to supervised learning
+    def series_to_supervised(self,data, n_in=1, n_out=1, dropnan=True):
+        n_vars = 1 if type(data) is list else data.shape[1]
+        df = pd.DataFrame(data)
+        cols, names = list(), list()
+    	# input sequence (t-n, ... t-1)
+        for i in range(n_in, 0, -1):
+            cols.append(df.shift(i))
+            names += [('var%d(t-%d)' % (j+1, i)) for j in range(n_vars)]
+    	# forecast sequence (t, t+1, ... t+n)
+        for i in range(0, n_out):
+            cols.append(df.shift(-i))
+            if i == 0:
+                names += [('var%d(t)' % (j+1)) for j in range(n_vars)]
+            else:
+                names += [('var%d(t+%d)' % (j+1, i)) for j in range(n_vars)]
+    	# put it all together
+        print("Series")
+        print(cols)
 
-        input_data = pd.read_csv('~/work/Data/'+input_data)
-        print(input_data.shape)
-        input_data = input_data.to_numpy()
+        agg = pd.concat(cols, axis=1)
+        agg.columns = names
+    	# drop rows with NaN values
+        if dropnan:
+            agg.dropna(inplace=True)
+        return agg
 
-        num_lags = 30
-        num_features = 1
-        n_obs = num_lags * num_features
-        test_X, test_y = input_data[:, :n_obs], input_data[:, -num_features]
-        test_X = test_X.reshape((test_X.shape[0], num_lags, num_features))
+
+    def preprocessing(self, history):
+
+        history_data = pd.read_csv('~/work/Data/'+history)
+
+        # manually specify column names
+        history_data.columns = ['date', 'quantity']
+        history_data.index.name = 'date'
+
+        print(history_data.head(10))
+        values = history_data.values
+
+        # integer encode direction
+        encoder = LabelEncoder()
+        values[:,0] = encoder.fit_transform(values[:,0])
+
+
+        # normalize features
+        #scaler = MinMaxScaler(feature_range=(0, 1))
+        scaled = self.scaler.fit_transform(values)
+
+        # frame as supervised learning
+        reframed = self.series_to_supervised(scaled, self.num_lags, 1)
+
+        values = reframed.values
+
+        #input_data = input_data.to_numpy()
+        input_data = values[-30:, :]
+
+
+
+        n_obs = self.num_lags * self.num_features
+        test_X, test_y = input_data[:, :n_obs], input_data[:, -self.num_features]
+        test_X = test_X.reshape((test_X.shape[0], self.num_lags, self.num_features))
         print(test_y.shape,test_X.shape)
         input_data = test_X
+
         # fill missing valuesload_model('model.h5')
         #input_data.fillna(self.values_fill_missing)
 
@@ -39,21 +92,45 @@ class lstm_model:
 
         return self.model.predict(input_data)
 
-    def postprocessing(self, input_data):
-        label = ""
-        if input_data[1] > 5:
-            label = "High demand"
-        else:
-            label = "Low demand"
+    def postprocessing(self, prediction,input_data):
 
-        return {"demand": input_data[1], "label": label, "status": "OK"}
 
-    def compute_prediction(self, input_data):
+        input_data = input_data.reshape((input_data.shape[0], self.num_lags*self.num_features))
+
+        #scaler = MinMaxScaler(feature_range=(0, 1))
+
+        # invert scaling for forecast
+        inv_yhat = concatenate((prediction, input_data[:, -1:]), axis=1)
+        print(inv_yhat.shape)
+
+        inv_yhat = self.scaler.inverse_transform(inv_yhat)
+        inv_yhat = inv_yhat[:,0]
+        print(inv_yhat)
+
+        objret = []
+        #print(input_data)
+        for i in inv_yhat:
+            label = ""
+            print("postprocessing",i)
+            if i > 5:
+                label = "High demand"
+            else:
+                label = "Low demand"
+
+
+
+            objret.append({"demand":str(round(i, 2)), "label": label, "status": "OK"})
+
+        #print(type(objret))
+        return objret
+
+    def compute_prediction(self, history):
         try:
-            print("try")
-            input_data = self.preprocessing(input_data)
+
+            input_data = self.preprocessing(history)
             prediction = self.predict(input_data) # only one sample
-            prediction = self.postprocessing(prediction)
+            print("predict")
+            prediction = self.postprocessing(prediction,input_data)
         except Exception as e:
             print(e)
             return {"status": "Error", "message": str(e)}
