@@ -4,7 +4,7 @@ from apps.endpoints.models import Endpoint
 from apps.endpoints.models import MLAlgorithm
 from apps.endpoints.models import MLAlgorithmStatus
 from apps.endpoints.models import MLRequest
-
+from apps.endpoints.models import PTest
 class EndpointSerializer(serializers.ModelSerializer):
     class Meta:
         model = Endpoint
@@ -52,4 +52,13 @@ class MLRequestSerializer(serializers.ModelSerializer):
             "feedback",
             "created_at",
             "parent_mlalgorithm",
+        )
+
+
+class PtSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = PTest
+
+        fields =  (
+            "pt"
         )

@@ -19,10 +19,14 @@ from django.conf.urls import url, include
 from django.contrib import admin
 from django.urls import path
 
+
 from apps.endpoints.urls import urlpatterns as endpoints_urlpatterns
 
 urlpatterns = [
     path('admin/', admin.site.urls),
+    path('chart/', include('apps.endpoints.urls')),
+
+    #path('', views.index, name='index'),
 ]
 
 urlpatterns += endpoints_urlpatterns

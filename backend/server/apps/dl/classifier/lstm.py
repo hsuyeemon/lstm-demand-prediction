@@ -8,12 +8,14 @@ from numpy import concatenate
 
 class lstm_model:
     def __init__(self):
-        path_to_artifacts = "../../research/"
+        self.path_to_artifacts = "../../research/"
         #self.values_fill_missing =  joblib.load(path_to_artifacts + "train_mode.joblib")
         #self.encoders = joblib.load(path_to_artifacts + "encoders.joblib")
         #self.model = joblib.load(path_to_artifacts + "random_forest.joblib")
 
-        self.model = load_model(path_to_artifacts+'model.h5')
+
+
+        self.model = load_model(self.path_to_artifacts+'model.h5')
         self.num_lags = 30
         self.num_features = 1
         self.scaler = MinMaxScaler(feature_range=(0, 1))
@@ -45,14 +47,28 @@ class lstm_model:
             agg.dropna(inplace=True)
         return agg
 
+    def setTimeLags(self,timelags):
+        self.timelags = timelags
+        if timelags == 30:
+            self.model = load_model(self.path_to_artifacts+'model.h5')
+        elif timelags == 90:
+            self.model = load_model(self.path_to_artifacts+'model-90days.h5')
+        else:
+            self.model = load_model(self.path_to_artifacts+'model-365days.h5')
 
     def preprocessing(self, history):
 
+        print("preprocessing")
         history_data = pd.read_csv('~/work/Data/'+history)
-
+        print("hist",history_data.head(10))
         # manually specify column names
         history_data.columns = ['date', 'quantity']
         history_data.index.name = 'date'
+        print(history_data.head(10))
+
+        date_index = history_data['date'].values
+        ii = self.timelags
+        date_index = date_index[-ii:]
 
         print(history_data.head(10))
         values = history_data.values
@@ -72,8 +88,7 @@ class lstm_model:
         values = reframed.values
 
         #input_data = input_data.to_numpy()
-        input_data = values[-30:, :]
-
+        input_data = values[-ii:, :]
 
 
         n_obs = self.num_lags * self.num_features
@@ -86,13 +101,13 @@ class lstm_model:
         #input_data.fillna(self.values_fill_missing)
 
 
-        return input_data
+        return input_data,date_index
 
     def predict(self, input_data):
 
         return self.model.predict(input_data)
 
-    def postprocessing(self, prediction,input_data):
+    def postprocessing(self, prediction,input_data,date_index):
 
 
         input_data = input_data.reshape((input_data.shape[0], self.num_lags*self.num_features))
@@ -109,6 +124,7 @@ class lstm_model:
 
         objret = []
         #print(input_data)
+        in_d = 0
         for i in inv_yhat:
             label = ""
             print("postprocessing",i)
@@ -119,18 +135,21 @@ class lstm_model:
 
 
 
-            objret.append({"demand":str(round(i, 2)), "label": label, "status": "OK"})
 
+            objret.append({"date":date_index[in_d],"demand":str(round(i, 2)), "label": label, "status": "OK"})
+            in_d = in_d + 1
         #print(type(objret))
         return objret
 
     def compute_prediction(self, history):
+        print("prediction")
         try:
 
-            input_data = self.preprocessing(history)
+
+            input_data,date_index = self.preprocessing(history)
             prediction = self.predict(input_data) # only one sample
             print("predict")
-            prediction = self.postprocessing(prediction,input_data)
+            prediction = self.postprocessing(prediction,input_data,date_index)
         except Exception as e:
             print(e)
             return {"status": "Error", "message": str(e)}

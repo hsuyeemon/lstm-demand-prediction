@@ -7,6 +7,8 @@ from apps.endpoints.views import MLAlgorithmViewSet
 from apps.endpoints.views import MLAlgorithmStatusViewSet
 from apps.endpoints.views import MLRequestViewSet
 from apps.endpoints.views import PredictView # import PredictView
+from apps.endpoints import views
+
 
 
 router = DefaultRouter(trailing_slash=False)
@@ -16,9 +18,14 @@ router.register(r"mlalgorithmstatuses", MLAlgorithmStatusViewSet, basename="mlal
 router.register(r"mlrequests", MLRequestViewSet, basename="mlrequests")
 
 urlpatterns = [
+    url(r'^chart$', views.chart, name = 'demo'),
+    url(r'^cChart$', views.cChart, name = 'chart'),
+
+
     url(r"^api/v1/", include(router.urls)),
     # add predict url
     url(
         r"^api/v1/(?P<endpoint_name>.+)/predict$", PredictView.as_view(), name="predict"
     ),
+
 ]
